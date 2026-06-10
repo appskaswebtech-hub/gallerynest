@@ -22,15 +22,15 @@ api_version = "2026-04"
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/customers/data_request"
-  topics = [ "customers/data_request" ]
+  topics = [ "CUSTOMERS_DATA_REQUEST" ]
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/customers/redact"
-  topics = [ "customers/redact" ]
+  topics = [ "CUSTOMERS_REDACT" ]
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/shop/redact"
-  topics = [ "shop/redact" ]
+  topics = [ "SHOP_REDACT" ]
 
 [auth]
 redirect_urls = [ "https://example.com/auth/callback" ]
