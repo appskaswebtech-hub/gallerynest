@@ -1,0 +1,1 @@
+ALTER TABLE "ProductSliderSetting" ADD COLUMN "thumbnailSize" INTEGER NOT NULL DEFAULT 76;
