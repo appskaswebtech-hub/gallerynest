@@ -5,10 +5,6 @@ name = "NestGallery"
 application_url = "https://gallerynest.kaswebtechsolutions.com/"
 embedded = true
 
-[access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_products"
-
 [webhooks]
 api_version = "2026-04"
 
@@ -20,6 +16,10 @@ api_version = "2026-04"
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_products"
 
 [auth]
 redirect_urls = [ "https://gallerynest.kaswebtechsolutions.com/auth/callback" ]
