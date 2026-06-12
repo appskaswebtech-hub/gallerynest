@@ -1,20 +1,485 @@
-"use strict";(()=>{const $="2026-06-10-variant-sync-v4",q="[data-gallery-nest-slider]",z=["gn-slider--left","gn-slider--right","gn-slider--top","gn-slider--bottom"],M=[".product__media-wrapper",".product__media-list","product-media-gallery","media-gallery","[id^='MediaGallery-']","[data-product-media-gallery]",".product-media-container",".product-gallery",".product-gallery__media",".product-single__media-group",".product__photos",".product__media"],N=t=>{const e=t.querySelector("[data-gallery-nest-media]");if(!(e!=null&&e.textContent))return[];try{const a=JSON.parse(e.textContent);return Array.isArray(a)?a.filter(n=>n.src):[]}catch{return[]}},B=t=>{const e=t.querySelector("[data-gallery-nest-variants]");if(!(e!=null&&e.textContent))return[];try{const a=JSON.parse(e.textContent);return Array.isArray(a)?a.filter(n=>n.id&&n.mediaId):[]}catch{return[]}},P=t=>{const e=String(t||"").trim();return!e.toLowerCase().startsWith("<svg")||/<script|on\w+=|javascript:/i.test(e)?"":e},L=t=>t==="prev"?'<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.7 15.3a1 1 0 0 1-1.4 0l-4.6-4.6a1 1 0 0 1 0-1.4l4.6-4.6a1 1 0 1 1 1.4 1.4L8.8 10l3.9 3.9a1 1 0 0 1 0 1.4Z"/></svg>':t==="next"?'<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.3 4.7a1 1 0 0 1 1.4 0l4.6 4.6a1 1 0 0 1 0 1.4l-4.6 4.6a1 1 0 1 1-1.4-1.4l3.9-3.9-3.9-3.9a1 1 0 0 1 0-1.4Z"/></svg>':t==="close"?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.64 4.22 12 10.59l6.36-6.37 1.42 1.42L13.41 12l6.37 6.36-1.42 1.42L12 13.41l-6.36 6.37-1.42-1.42L10.59 12 4.22 5.64l1.42-1.42Z"/></svg>':'<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 2.5a4.5 4.5 0 0 1 3.5 7.32l1.84 1.84a1 1 0 0 1-1.42 1.42L9.1 11.24A4.5 4.5 0 1 1 7 2.5Zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Zm6.75 7.25a1 1 0 0 1 1-1H17a1 1 0 0 1 1 1V14a1 1 0 1 1-2 0v-.84l-2.54 2.55a1 1 0 0 1-1.42-1.42L14.6 11.75h-.85a1 1 0 0 1-1-1Z"/></svg>',f=(t,e)=>P(e)||L(t),k=t=>t.closest(".product__media-wrapper")||t.closest(".product-gallery")||t.closest(".product-single__media-group")||t,C=t=>M.flatMap(e=>Array.from(document.querySelectorAll(e))).filter(e=>e&&!e.contains(t)&&e!==t).map(k).find((e,a,n)=>e&&n.indexOf(e)===a),E=t=>{try{return new URL(t,window.location.origin).pathname.replace(/_(\d+x|pico|icon|thumb|small|compact|medium|large|grande|master)(?=\.)/,"")}catch{return t}},O=(t,e)=>{const a=new Set(e.flatMap(n=>[n.thumb,n.src,n.zoom]).filter(Boolean).map(E));return a.size?Array.from(document.images).filter(n=>!t.contains(n)).filter(n=>a.has(E(n.currentSrc||n.src))).map(n=>n.closest(".product__media-wrapper, product-media-gallery, media-gallery, .product-gallery, .product__photos, .product-single__media-group")||n.closest(".shopify-section")||n.parentElement).find(Boolean):null},T=(t,e)=>{const a=C(t)||O(t,e);a&&(a.prepend(t),a.classList.add("gn-slider-host"),a.removeAttribute("hidden"),a.style.removeProperty("display"),a.dataset.galleryNestHidden="true")},R=(t,e,a)=>{let n=e;const r=document.createElement("div");r.className="gn-lightbox",r.setAttribute("role","dialog"),r.setAttribute("aria-modal","true"),r.setAttribute("aria-label","Product image gallery"),r.innerHTML=`
+"use strict";
+
+(() => {
+  const VERSION = "2026-06-12-tagged-variant-media-v1";
+  const ROOT_SELECTOR = "[data-gallery-nest-slider]";
+  const POSITION_CLASSES = [
+    "gn-slider--left",
+    "gn-slider--right",
+    "gn-slider--top",
+    "gn-slider--bottom",
+  ];
+  const GALLERY_SELECTORS = [
+    ".product__media-wrapper",
+    ".product__media-list",
+    "product-media-gallery",
+    "media-gallery",
+    "[id^='MediaGallery-']",
+    "[data-product-media-gallery]",
+    ".product-media-container",
+    ".product-gallery",
+    ".product-gallery__media",
+    ".product-single__media-group",
+    ".product__photos",
+    ".product__media",
+  ];
+
+  const parseJson = (root, selector) => {
+    const node = root.querySelector(selector);
+    if (!node?.textContent) return [];
+
+    try {
+      const parsed = JSON.parse(node.textContent);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const normalizeId = (id) => String(id || "").split("/").pop();
+
+  const getMedia = (root) =>
+    parseJson(root, "[data-gallery-nest-media]").filter((media) => media.src);
+
+  const getVariants = (root) =>
+    parseJson(root, "[data-gallery-nest-variants]").filter(
+      (variant) => variant.id && variant.mediaId,
+    );
+
+  const sanitizeSvg = (svg) => {
+    const value = String(svg || "").trim();
+    if (!value.toLowerCase().startsWith("<svg")) return "";
+    if (/<script|on\w+=|javascript:/i.test(value)) return "";
+    return value;
+  };
+
+  const defaultIcon = (name) => {
+    if (name === "prev") {
+      return '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.7 15.3a1 1 0 0 1-1.4 0l-4.6-4.6a1 1 0 0 1 0-1.4l4.6-4.6a1 1 0 1 1 1.4 1.4L8.8 10l3.9 3.9a1 1 0 0 1 0 1.4Z"/></svg>';
+    }
+
+    if (name === "next") {
+      return '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.3 4.7a1 1 0 0 1 1.4 0l4.6 4.6a1 1 0 0 1 0 1.4l-4.6 4.6a1 1 0 1 1-1.4-1.4l3.9-3.9-3.9-3.9a1 1 0 0 1 0-1.4Z"/></svg>';
+    }
+
+    if (name === "close") {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.64 4.22 12 10.59l6.36-6.37 1.42 1.42L13.41 12l6.37 6.36-1.42 1.42L12 13.41l-6.36 6.37-1.42-1.42L10.59 12 4.22 5.64l1.42-1.42Z"/></svg>';
+    }
+
+    return '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 2.5a4.5 4.5 0 0 1 3.5 7.32l1.84 1.84a1 1 0 0 1-1.42 1.42L9.1 11.24A4.5 4.5 0 1 1 7 2.5Zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Zm6.75 7.25a1 1 0 0 1 1-1H17a1 1 0 0 1 1 1V14a1 1 0 1 1-2 0v-.84l-2.54 2.55a1 1 0 0 1-1.42-1.42L14.6 11.75h-.85a1 1 0 0 1-1-1Z"/></svg>';
+  };
+
+  const icon = (name, customSvg) => sanitizeSvg(customSvg) || defaultIcon(name);
+
+  const normalizeImageUrl = (src) => {
+    try {
+      return new URL(src, window.location.origin).pathname.replace(
+        /_(\d+x|pico|icon|thumb|small|compact|medium|large|grande|master)(?=\.)/,
+        "",
+      );
+    } catch {
+      return src;
+    }
+  };
+
+  const galleryHost = (node) =>
+    node.closest(".product__media-wrapper") ||
+    node.closest(".product-gallery") ||
+    node.closest(".product-single__media-group") ||
+    node;
+
+  const findNativeGallery = (root, media) => {
+    const nativeGallery = GALLERY_SELECTORS.flatMap((selector) =>
+      Array.from(document.querySelectorAll(selector)),
+    )
+      .filter((node) => node && !node.contains(root) && node !== root)
+      .map(galleryHost)
+      .find((node, index, nodes) => node && nodes.indexOf(node) === index);
+
+    if (nativeGallery) return nativeGallery;
+
+    const mediaUrls = new Set(
+      media.flatMap((item) => [item.thumb, item.src, item.zoom]).filter(Boolean).map(
+        normalizeImageUrl,
+      ),
+    );
+
+    if (!mediaUrls.size) return null;
+
+    return Array.from(document.images)
+      .filter((image) => !root.contains(image))
+      .filter((image) => mediaUrls.has(normalizeImageUrl(image.currentSrc || image.src)))
+      .map(
+        (image) =>
+          image.closest(
+            ".product__media-wrapper, product-media-gallery, media-gallery, .product-gallery, .product__photos, .product-single__media-group",
+          ) ||
+          image.closest(".shopify-section") ||
+          image.parentElement,
+      )
+      .find(Boolean);
+  };
+
+  const replaceNativeGallery = (root, media) => {
+    const host = findNativeGallery(root, media);
+    if (!host) return;
+
+    host.prepend(root);
+    host.classList.add("gn-slider-host");
+    host.removeAttribute("hidden");
+    host.style.removeProperty("display");
+    host.dataset.galleryNestHidden = "true";
+  };
+
+  const currentVariantId = () => {
+    const urlVariant = new URL(window.location.href).searchParams.get("variant");
+    if (urlVariant) return urlVariant;
+
+    const input = document.querySelector(
+      'form[action*="/cart/add"] [name="id"], product-form [name="id"], [name="id"]',
+    );
+    return input?.value || input?.getAttribute("value") || null;
+  };
+
+  const mediaForVariant = (media, variantId, variantImageMap) => {
+    if (!variantId) return media;
+
+    const safeVariantImageMap =
+      variantImageMap && typeof variantImageMap === "object" ? variantImageMap : {};
+    const normalizedVariantId = normalizeId(variantId);
+    const mappedIds =
+      safeVariantImageMap[String(variantId)] ||
+      safeVariantImageMap[normalizedVariantId] ||
+      Object.entries(safeVariantImageMap).find(
+        ([mapVariantId]) => normalizeId(mapVariantId) === normalizedVariantId,
+      )?.[1];
+
+    if (Array.isArray(mappedIds)) {
+      const selectedIds = new Set(mappedIds.map(normalizeId));
+      const mappedMedia = media.filter((item) => selectedIds.has(normalizeId(item.id)));
+      if (mappedMedia.length) return mappedMedia;
+    }
+
+    const taggedMedia = media.filter((item) =>
+      (item.variantIds || []).map(normalizeId).includes(normalizedVariantId),
+    );
+
+    return taggedMedia.length ? taggedMedia : media;
+  };
+
+  const openLightbox = (media, startIndex, settings) => {
+    let activeIndex = startIndex;
+    const lightbox = document.createElement("div");
+    lightbox.className = "gn-lightbox";
+    lightbox.setAttribute("role", "dialog");
+    lightbox.setAttribute("aria-modal", "true");
+    lightbox.setAttribute("aria-label", "Product image gallery");
+    lightbox.innerHTML = `
       <div class="gn-lightbox__bar">
         <span class="gn-lightbox__counter"></span>
-        <button class="gn-lightbox__close" type="button" aria-label="Close gallery">${L("close")}</button>
+        <button class="gn-lightbox__close" type="button" aria-label="Close gallery">${defaultIcon("close")}</button>
       </div>
       <div class="gn-lightbox__viewer">
-        <button class="gn-lightbox__nav gn-lightbox__nav--prev" type="button" aria-label="Previous image">${f("prev",a.previousArrowSvg)}</button>
+        ${
+          media.length > 1
+            ? `<button class="gn-lightbox__nav gn-lightbox__nav--prev" type="button" aria-label="Previous image">${icon("prev", settings.previousArrowSvg)}</button>`
+            : ""
+        }
         <img class="gn-lightbox__image" alt="">
-        <button class="gn-lightbox__nav gn-lightbox__nav--next" type="button" aria-label="Next image">${f("next",a.nextArrowSvg)}</button>
+        ${
+          media.length > 1
+            ? `<button class="gn-lightbox__nav gn-lightbox__nav--next" type="button" aria-label="Next image">${icon("next", settings.nextArrowSvg)}</button>`
+            : ""
+        }
       </div>
       <div class="gn-lightbox__thumbs" role="list"></div>
-    `;const s=r.querySelector(".gn-lightbox__counter"),i=r.querySelector(".gn-lightbox__image"),c=r.querySelector(".gn-lightbox__close"),y=r.querySelector(".gn-lightbox__nav--prev"),v=r.querySelector(".gn-lightbox__nav--next"),S=r.querySelector(".gn-lightbox__thumbs"),p=document.documentElement.style.overflow,o=l=>{n=(l+t.length)%t.length;const h=t[n];i.src=h.zoom||h.src,i.alt=h.alt||"",s.textContent=`${n+1} / ${t.length}`,S.querySelectorAll(".gn-lightbox__thumb").forEach((g,_)=>{g.setAttribute("aria-current",String(_===n))})},b=()=>{document.removeEventListener("keydown",x),document.documentElement.style.overflow=p,r.remove()},x=l=>{l.key==="Escape"&&b(),l.key==="ArrowLeft"&&o(n-1),l.key==="ArrowRight"&&o(n+1)};t.forEach((l,h)=>{const g=document.createElement("button");g.type="button",g.className="gn-lightbox__thumb",g.setAttribute("aria-label",`View image ${h+1}`),g.innerHTML=`<img src="${l.thumb||l.src}" alt="">`,g.addEventListener("click",()=>o(h)),S.append(g)}),c.addEventListener("click",b),y.addEventListener("click",()=>o(n-1)),v.addEventListener("click",()=>o(n+1)),r.addEventListener("click",l=>{l.target===r&&b()}),document.addEventListener("keydown",x),document.documentElement.style.overflow="hidden",document.body.append(r),o(n),c.focus()},V=(t,e,a,n)=>{let r=0;const s=["left","right","top","bottom"].includes(a)?a:"left",i=["top-left","top-right","bottom-left","bottom-right"].includes(n.zoomIconPosition)?n.zoomIconPosition:"top-right",c=!!n.hideThumbnails,y=!!n.hideZoomIcon,v=Number(n.thumbnailSize||76),S=Math.min(Math.max(v,48),140);if(t.classList.add("gn-slider",`gn-slider--${s}`),t.classList.toggle("gn-slider--single",c),t.style.setProperty("--gn-thumb-size",`${S}px`),t.classList.remove(...z.filter(d=>d!==`gn-slider--${s}`)),!e.length){t.innerHTML='<div class="gn-slider__empty">No product images found.</div>',t.hidden=!1;return}t.innerHTML=`
+    `;
+
+    const counter = lightbox.querySelector(".gn-lightbox__counter");
+    const image = lightbox.querySelector(".gn-lightbox__image");
+    const close = lightbox.querySelector(".gn-lightbox__close");
+    const prev = lightbox.querySelector(".gn-lightbox__nav--prev");
+    const next = lightbox.querySelector(".gn-lightbox__nav--next");
+    const thumbs = lightbox.querySelector(".gn-lightbox__thumbs");
+    const previousOverflow = document.documentElement.style.overflow;
+
+    const setActive = (index) => {
+      activeIndex = (index + media.length) % media.length;
+      const item = media[activeIndex];
+      image.src = item.zoom || item.src;
+      image.alt = item.alt || "";
+      counter.textContent = `${activeIndex + 1} / ${media.length}`;
+      thumbs.querySelectorAll(".gn-lightbox__thumb").forEach((thumb, thumbIndex) => {
+        thumb.setAttribute("aria-current", String(thumbIndex === activeIndex));
+      });
+    };
+
+    const closeLightbox = () => {
+      document.removeEventListener("keydown", onKeydown);
+      document.documentElement.style.overflow = previousOverflow;
+      lightbox.remove();
+    };
+
+    const onKeydown = (event) => {
+      if (event.key === "Escape") closeLightbox();
+      if (event.key === "ArrowLeft" && media.length > 1) setActive(activeIndex - 1);
+      if (event.key === "ArrowRight" && media.length > 1) setActive(activeIndex + 1);
+    };
+
+    media.forEach((item, index) => {
+      const thumb = document.createElement("button");
+      thumb.type = "button";
+      thumb.className = "gn-lightbox__thumb";
+      thumb.setAttribute("aria-label", `View image ${index + 1}`);
+      thumb.innerHTML = `<img src="${item.thumb || item.src}" alt="">`;
+      thumb.addEventListener("click", () => setActive(index));
+      thumbs.append(thumb);
+    });
+
+    close.addEventListener("click", closeLightbox);
+    prev?.addEventListener("click", () => setActive(activeIndex - 1));
+    next?.addEventListener("click", () => setActive(activeIndex + 1));
+    lightbox.addEventListener("click", (event) => {
+      if (event.target === lightbox) closeLightbox();
+    });
+    document.addEventListener("keydown", onKeydown);
+    document.documentElement.style.overflow = "hidden";
+    document.body.append(lightbox);
+    setActive(activeIndex);
+    close.focus();
+  };
+
+  const renderSlider = (root, allMedia, position, settings) => {
+    let activeIndex = 0;
+    let visibleMedia = allMedia;
+    const safePosition = ["left", "right", "top", "bottom"].includes(position)
+      ? position
+      : "left";
+    const zoomPosition = [
+      "top-left",
+      "top-right",
+      "bottom-left",
+      "bottom-right",
+    ].includes(settings.zoomIconPosition)
+      ? settings.zoomIconPosition
+      : "top-right";
+    const hideThumbnails = !!settings.hideThumbnails;
+    const hideZoomIcon = !!settings.hideZoomIcon;
+    const thumbnailSize = Math.min(Math.max(Number(settings.thumbnailSize || 76), 48), 140);
+
+    root.classList.add("gn-slider", `gn-slider--${safePosition}`);
+    root.classList.toggle("gn-slider--single", hideThumbnails);
+    root.style.setProperty("--gn-thumb-size", `${thumbnailSize}px`);
+    root.classList.remove(
+      ...POSITION_CLASSES.filter((className) => className !== `gn-slider--${safePosition}`),
+    );
+
+    if (!allMedia.length) {
+      root.innerHTML = '<div class="gn-slider__empty">No product images found.</div>';
+      root.hidden = false;
+      return;
+    }
+
+    root.innerHTML = `
       <div class="gn-slider__thumbs" role="list"></div>
       <div class="gn-slider__stage">
-        ${y?"":`<button class="gn-slider__zoom-icon gn-slider__zoom-icon--${i}" type="button" aria-label="Open image gallery">${f("zoom",n.zoomIconSvg)}</button>`}
-        <button class="gn-slider__button gn-slider__button--prev" type="button" aria-label="Previous image">${f("prev",n.previousArrowSvg)}</button>
+        ${
+          hideZoomIcon
+            ? ""
+            : `<button class="gn-slider__zoom-icon gn-slider__zoom-icon--${zoomPosition}" type="button" aria-label="Open image gallery">${icon("zoom", settings.zoomIconSvg)}</button>`
+        }
         <img class="gn-slider__main" alt="">
-        <button class="gn-slider__button gn-slider__button--next" type="button" aria-label="Next image">${f("next",n.nextArrowSvg)}</button>
       </div>
-    `;const p=t.querySelector(".gn-slider__stage"),o=t.querySelector(".gn-slider__main"),b=t.querySelector(".gn-slider__thumbs"),x=t.querySelector(".gn-slider__button--prev"),l=t.querySelector(".gn-slider__button--next"),h=t.querySelector(".gn-slider__zoom-icon"),g=d=>{const u=p.getBoundingClientRect(),m=(d.clientX-u.left)/u.width*100,w=(d.clientY-u.top)/u.height*100;o.style.transformOrigin=`${m}% ${w}%`},_=d=>{r=(d+e.length)%e.length;const u=e[r];o.src=u.zoom||u.src,o.alt=u.alt||"",p.classList.remove("is-zooming"),o.style.transformOrigin="center",b.querySelectorAll(".gn-slider__thumb").forEach((m,w)=>{m.setAttribute("aria-current",String(w===r))})};c||e.forEach((d,u)=>{const m=document.createElement("button");m.type="button",m.className="gn-slider__thumb",m.setAttribute("aria-label",`View image ${u+1}`),m.innerHTML=`<img src="${d.thumb||d.src}" alt="">`,m.addEventListener("click",()=>_(u)),b.append(m)}),x.addEventListener("click",()=>_(r-1)),l.addEventListener("click",()=>_(r+1)),h?h.addEventListener("click",d=>{d.stopPropagation(),R(e,r,n)}):(p.addEventListener("mousemove",g),p.addEventListener("mouseenter",()=>p.classList.add("is-zooming")),p.addEventListener("mouseleave",()=>{p.classList.remove("is-zooming"),o.style.transformOrigin="center"})),_(0),n.syncVariantImages&&H(t,e,_),t.hidden=!1},A=()=>{const t=new URL(window.location.href).searchParams.get("variant");if(t)return t;const e=document.querySelector('form[action*="/cart/add"] [name="id"], product-form [name="id"], [name="id"]');return(e==null?void 0:e.value)||(e==null?void 0:e.getAttribute("value"))||null},H=(t,e,a)=>{const n=s=>{if(!s)return;const i=e.findIndex(c=>(c.variantIds||[]).map(String).includes(String(s)));i>=0&&a(i)},r=s=>{window.requestAnimationFrame(()=>n(s||A()))};document.addEventListener("change",s=>{const i=s.target;i instanceof HTMLElement&&(i.matches('form[action*="/cart/add"] select, form[action*="/cart/add"] input')||i.closest("variant-selects, variant-radios, product-form"))&&r(A())}),["variant:change","variantChange","product:variant-change"].forEach(s=>{document.addEventListener(s,i=>{var c,y,v;r(((y=(c=i.detail)==null?void 0:c.variant)==null?void 0:y.id)||((v=i.detail)==null?void 0:v.variantId))})}),["pushState","replaceState"].forEach(s=>{const i=window.history[s];i!=null&&i.galleryNestWrapped||(window.history[s]=function(...y){const v=i.apply(this,y);return window.dispatchEvent(new Event("gallery-nest:url-change")),v},window.history[s].galleryNestWrapped=!0)}),window.addEventListener("popstate",()=>r()),window.addEventListener("gallery-nest:url-change",()=>r()),r()},Z=async t=>{if(t.dataset.galleryNestReady==="true")return;t.dataset.galleryNestReady="true",t.dataset.galleryNestVersion=$;const e=B(t),a=N(t).map(s=>({...s,variantIds:e.filter(i=>String(i.mediaId)===String(s.id)).map(i=>i.id)})),n=t.dataset.productId,r=t.dataset.appProxyPath||"/apps/gallery-nest/slider-settings";if(n)try{const s=await fetch(`${r}?product_id=${encodeURIComponent(n)}`,{headers:{Accept:"application/json"}});if(!s.ok)return;const i=await s.json();if(!i.enabled)return;T(t,a),V(t,a,i.thumbnailPosition,i)}catch{t.dataset.galleryNestReady="false"}},I=()=>{document.querySelectorAll(q).forEach(Z)};document.readyState==="loading"?document.addEventListener("DOMContentLoaded",I):I()})();
+    `;
+
+    const stage = root.querySelector(".gn-slider__stage");
+    const main = root.querySelector(".gn-slider__main");
+    const thumbs = root.querySelector(".gn-slider__thumbs");
+    const zoom = root.querySelector(".gn-slider__zoom-icon");
+
+    const rebuildNavigation = () => {
+      root.querySelectorAll(".gn-slider__button").forEach((button) => button.remove());
+      if (visibleMedia.length <= 1) return;
+
+      const prev = document.createElement("button");
+      prev.type = "button";
+      prev.className = "gn-slider__button gn-slider__button--prev";
+      prev.setAttribute("aria-label", "Previous image");
+      prev.innerHTML = icon("prev", settings.previousArrowSvg);
+      prev.addEventListener("click", () => setActive(activeIndex - 1));
+
+      const next = document.createElement("button");
+      next.type = "button";
+      next.className = "gn-slider__button gn-slider__button--next";
+      next.setAttribute("aria-label", "Next image");
+      next.innerHTML = icon("next", settings.nextArrowSvg);
+      next.addEventListener("click", () => setActive(activeIndex + 1));
+
+      stage.append(prev, next);
+    };
+
+    const rebuildThumbs = () => {
+      thumbs.innerHTML = "";
+      if (hideThumbnails) return;
+
+      visibleMedia.forEach((item, index) => {
+        const thumb = document.createElement("button");
+        thumb.type = "button";
+        thumb.className = "gn-slider__thumb";
+        thumb.setAttribute("aria-label", `View image ${index + 1}`);
+        thumb.innerHTML = `<img src="${item.thumb || item.src}" alt="">`;
+        thumb.addEventListener("click", () => setActive(index));
+        thumbs.append(thumb);
+      });
+    };
+
+    const setActive = (index) => {
+      activeIndex = (index + visibleMedia.length) % visibleMedia.length;
+      const item = visibleMedia[activeIndex];
+      main.src = item.zoom || item.src;
+      main.alt = item.alt || "";
+      stage.classList.remove("is-zooming");
+      main.style.transformOrigin = "center";
+      thumbs.querySelectorAll(".gn-slider__thumb").forEach((thumb, thumbIndex) => {
+        thumb.setAttribute("aria-current", String(thumbIndex === activeIndex));
+      });
+    };
+
+    const renderForVariant = (variantId) => {
+      const variantMedia = mediaForVariant(allMedia, variantId, settings.variantImageMap);
+      const variantFirstIndex = allMedia.findIndex(
+        (item) => String(item.id) === String(variantMedia[0]?.id),
+      );
+      if (variantFirstIndex >= 0) setActive(variantFirstIndex);
+    };
+
+    stage.addEventListener("mousemove", (event) => {
+      const rect = stage.getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width) * 100;
+      const y = ((event.clientY - rect.top) / rect.height) * 100;
+      main.style.transformOrigin = `${x}% ${y}%`;
+    });
+    stage.addEventListener("mouseenter", () => stage.classList.add("is-zooming"));
+    stage.addEventListener("mouseleave", () => {
+      stage.classList.remove("is-zooming");
+      main.style.transformOrigin = "center";
+    });
+    zoom?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const lightboxMedia = mediaForVariant(
+        allMedia,
+        currentVariantId(),
+        settings.variantImageMap,
+      );
+      const lightboxStartIndex = Math.max(
+        0,
+        lightboxMedia.findIndex(
+          (item) => String(item.id) === String(visibleMedia[activeIndex]?.id),
+        ),
+      );
+      openLightbox(lightboxMedia, lightboxStartIndex, settings);
+    });
+
+    if (settings.syncVariantImages) {
+      wireVariantChanges(renderForVariant);
+    }
+
+    rebuildThumbs();
+    rebuildNavigation();
+    setActive(0);
+    if (settings.syncVariantImages) {
+      renderForVariant(currentVariantId());
+    }
+    root.hidden = false;
+  };
+
+  const wireVariantChanges = (renderForVariant) => {
+    const update = (variantId) => window.requestAnimationFrame(() => renderForVariant(variantId));
+
+    document.addEventListener("change", (event) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.matches('form[action*="/cart/add"] select, form[action*="/cart/add"] input') ||
+          target.closest("variant-selects, variant-radios, product-form"))
+      ) {
+        update(currentVariantId());
+      }
+    });
+
+    ["variant:change", "variantChange", "product:variant-change"].forEach((eventName) => {
+      document.addEventListener(eventName, (event) => {
+        update(event.detail?.variant?.id || event.detail?.variantId || currentVariantId());
+      });
+    });
+
+    ["pushState", "replaceState"].forEach((method) => {
+      const original = window.history[method];
+      if (!original || original.galleryNestWrapped) return;
+
+      window.history[method] = function (...args) {
+        const result = original.apply(this, args);
+        window.dispatchEvent(new Event("gallery-nest:url-change"));
+        return result;
+      };
+      window.history[method].galleryNestWrapped = true;
+    });
+
+    window.addEventListener("popstate", () => update(currentVariantId()));
+    window.addEventListener("gallery-nest:url-change", () => update(currentVariantId()));
+  };
+
+  const init = async (root) => {
+    if (root.dataset.galleryNestReady === "true") return;
+
+    root.dataset.galleryNestReady = "true";
+    root.dataset.galleryNestVersion = VERSION;
+
+    const media = getMedia(root);
+    const variants = getVariants(root);
+    const mediaWithFallbackVariantIds = media.map((item) => ({
+      ...item,
+      variantIds:
+        item.variantIds?.length > 0
+          ? item.variantIds
+          : variants
+              .filter((variant) => String(variant.mediaId) === String(item.id))
+              .map((variant) => variant.id),
+    }));
+    const productId = root.dataset.productId;
+    const appProxyPath = root.dataset.appProxyPath || "/apps/gallery-nest/slider-settings";
+    const hasOnlyDefaultVariant = root.dataset.hasOnlyDefaultVariant === "true";
+
+    if (!productId) return;
+
+    try {
+      const response = await fetch(`${appProxyPath}?product_id=${encodeURIComponent(productId)}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) return;
+
+      const settings = await response.json();
+      if (!settings.enabled) return;
+
+      const finalSettings = {
+        ...settings,
+        hideThumbnails: hasOnlyDefaultVariant || settings.hideThumbnails,
+      };
+
+      replaceNativeGallery(root, mediaWithFallbackVariantIds);
+      renderSlider(root, mediaWithFallbackVariantIds, settings.thumbnailPosition, finalSettings);
+    } catch {
+      root.dataset.galleryNestReady = "false";
+    }
+  };
+
+  const initAll = () => {
+    document.querySelectorAll(ROOT_SELECTOR).forEach(init);
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initAll);
+  } else {
+    initAll();
+  }
+})();

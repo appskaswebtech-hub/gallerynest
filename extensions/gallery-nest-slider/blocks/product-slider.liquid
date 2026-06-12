@@ -1,23 +1,25 @@
-{% liquid
-  assign gallery_media = product.media | where: 'media_type', 'image'
-%}
-
 <div
   class="gn-slider"
   data-gallery-nest-slider
   data-product-id="{{ product.id }}"
   data-app-proxy-path="/apps/gallery-nest/slider-settings"
+  data-has-only-default-variant="{{ product.has_only_default_variant }}"
   hidden
 >
   <script type="application/json" data-gallery-nest-media>
     [
-      {%- for media in gallery_media -%}
+      {%- for image in product.images -%}
         {
-          "id": {{ media.id | json }},
-          "alt": {{ media.alt | default: product.title | json }},
-          "thumb": {{ media.preview_image | image_url: width: 180 | json }},
-          "src": {{ media.preview_image | image_url: width: 900 | json }},
-          "zoom": {{ media.preview_image | image_url: width: 1800 | json }}
+          "id": {{ image.id | json }},
+          "alt": {{ image.alt | default: product.title | json }},
+          "thumb": {{ image | image_url: width: 180 | json }},
+          "src": {{ image | image_url: width: 900 | json }},
+          "zoom": {{ image | image_url: width: 1800 | json }},
+          "variantIds": [
+            {%- for variant in image.variants -%}
+              {{ variant.id | json }}{% unless forloop.last %},{% endunless %}
+            {%- endfor -%}
+          ]
         }{% unless forloop.last %},{% endunless %}
       {%- endfor -%}
     ]
@@ -27,7 +29,7 @@
       {%- for variant in product.variants -%}
         {
           "id": {{ variant.id | json }},
-          "mediaId": {{ variant.featured_media.id | json }}
+          "mediaId": {{ variant.featured_image.id | json }}
         }{% unless forloop.last %},{% endunless %}
       {%- endfor -%}
     ]

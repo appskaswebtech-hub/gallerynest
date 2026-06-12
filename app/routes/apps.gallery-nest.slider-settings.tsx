@@ -2,7 +2,23 @@ import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
+type SliderProduct = {
+  id: string;
+  variantImageMap?: Record<string, string[]>;
+};
+
 const parseJsonArray = (value: string | null | undefined): string[] => {
+  if (!value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const parseProducts = (value: string | null | undefined): SliderProduct[] => {
   if (!value) return [];
 
   try {
@@ -33,10 +49,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     where: { shop: session.shop },
   });
   const productIds = parseJsonArray(setting?.productIds);
+  const selectedProduct = parseProducts(setting?.products).find(
+    (product) => product.id === productId,
+  );
 
   return Response.json(
     {
       enabled: Boolean(productId && productIds.includes(productId)),
+      variantImageMap: selectedProduct?.variantImageMap,
       thumbnailPosition: setting?.thumbnailPosition ?? "left",
       thumbnailSize: setting?.thumbnailSize ?? 76,
       syncVariantImages: setting?.syncVariantImages ?? true,

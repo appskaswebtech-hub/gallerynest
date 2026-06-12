@@ -54,7 +54,7 @@
   position: relative;
   overflow: hidden;
   aspect-ratio: 1 / 1;
-  background: #f6f6f4;
+  background: #ffffff;
   border: 1px solid var(--gn-border);
 }
 

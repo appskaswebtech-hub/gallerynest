@@ -15,6 +15,23 @@ type SliderProduct = {
   title: string;
   handle?: string;
   image?: string | null;
+  images?: SliderImage[];
+  variants?: SliderVariant[];
+  variantImageMap?: Record<string, string[]>;
+};
+
+type SliderImage = {
+  id: string;
+  url: string;
+  alt?: string | null;
+};
+
+type SliderVariant = {
+  id: string;
+  title: string;
+  sku?: string | null;
+  image?: string | null;
+  imageId?: string | null;
 };
 
 const THUMBNAIL_POSITIONS = new Set(["left", "right", "top", "bottom"]);
@@ -37,24 +54,170 @@ const parseJsonArray = <T,>(value: string | null | undefined): T[] => {
   }
 };
 
+const normalizeShopifyId = (id: string | number | null | undefined) => {
+  if (id === null || id === undefined) return "";
+  return String(id).split("/").pop() ?? String(id);
+};
+
 const normalizeProducts = (products: SliderProduct[]) =>
   products
     .filter((product) => product.id && product.title)
-    .map((product) => ({
-      id: product.id,
-      title: product.title,
-      handle: product.handle,
-      image: product.image ?? null,
-    }));
+    .map((product) => {
+      const images = Array.isArray(product.images)
+        ? product.images
+            .filter((image) => image.id && image.url)
+            .map((image) => ({
+              id: normalizeShopifyId(image.id),
+              url: image.url,
+              alt: image.alt ?? null,
+            }))
+        : [];
+      const imageIds = new Set(images.map((image) => image.id));
+      const variants = Array.isArray(product.variants)
+        ? product.variants
+            .filter((variant) => variant.id && variant.title)
+            .map((variant) => {
+              const id = normalizeShopifyId(variant.id);
+
+              return {
+                id,
+                title: variant.title,
+                sku: variant.sku ?? null,
+                image: variant.image ?? null,
+                imageId: variant.imageId ? normalizeShopifyId(variant.imageId) : null,
+              };
+            })
+        : [];
+      const existingMap =
+        product.variantImageMap && typeof product.variantImageMap === "object"
+          ? product.variantImageMap
+          : {};
+      const variantImageMap = variants.reduce<Record<string, string[]>>(
+        (map, variant) => {
+          const savedMapEntry =
+            existingMap[variant.id] ??
+            Object.entries(existingMap).find(
+              ([variantId]) => normalizeShopifyId(variantId) === variant.id,
+            )?.[1];
+          const savedImageIds = Array.isArray(savedMapEntry)
+            ? savedMapEntry
+                .map(normalizeShopifyId)
+                .filter((imageId) => imageIds.has(imageId))
+            : [];
+          const fallbackImageIds =
+            variant.imageId && imageIds.has(variant.imageId) ? [variant.imageId] : [];
+
+          map[variant.id] = savedImageIds.length ? savedImageIds : fallbackImageIds;
+          return map;
+        },
+        {},
+      );
+
+      return {
+        id: product.id,
+        title: product.title,
+        handle: product.handle,
+        image: product.image ?? null,
+        images,
+        variants,
+        variantImageMap,
+      };
+    });
+
+const hydrateProductsWithVariants = async (
+  admin: Awaited<ReturnType<typeof authenticate.admin>>["admin"],
+  products: SliderProduct[],
+) => {
+  if (products.length === 0) return [];
+
+  const response = await admin.graphql(
+    `#graphql
+      query SelectedProducts($ids: [ID!]!) {
+        nodes(ids: $ids) {
+          ... on Product {
+            id
+            title
+            handle
+            featuredImage {
+              id
+              url
+            }
+            images(first: 100) {
+              nodes {
+                id
+                url
+                altText
+              }
+            }
+            variants(first: 100) {
+              nodes {
+                id
+                title
+                sku
+                image {
+                  id
+                  url
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    { variables: { ids: products.map((product) => product.id) } },
+  );
+  const data = await response.json();
+  const productsById = new Map<string, SliderProduct>(
+    (data.data?.nodes ?? [])
+      .filter(Boolean)
+      .map((product: any) => [
+        product.id,
+        {
+          id: product.id,
+          title: product.title,
+          handle: product.handle,
+          image: product.featuredImage?.url ?? null,
+          images: (product.images?.nodes ?? []).map((image: any) => ({
+            id: image.id,
+            url: image.url,
+            alt: image.altText ?? null,
+          })),
+          variants: (product.variants?.nodes ?? []).map((variant: any) => ({
+            id: variant.id,
+            title: variant.title,
+            sku: variant.sku ?? null,
+            image: variant.image?.url ?? null,
+            imageId: variant.image?.id ?? null,
+          })),
+        },
+      ]),
+  );
+
+  return normalizeProducts(
+    products.map((savedProduct) => {
+      const hydratedProduct = productsById.get(savedProduct.id);
+      if (!hydratedProduct) return savedProduct;
+
+      return {
+        ...hydratedProduct,
+        variantImageMap: savedProduct.variantImageMap,
+      };
+    }),
+  );
+};
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const setting = await prisma.productSliderSetting.findUnique({
     where: { shop: session.shop },
   });
+  const products = await hydrateProductsWithVariants(
+    admin,
+    parseJsonArray<SliderProduct>(setting?.products),
+  );
 
   return {
-    products: parseJsonArray<SliderProduct>(setting?.products),
+    products,
     thumbnailPosition: setting?.thumbnailPosition ?? "left",
     thumbnailSize: setting?.thumbnailSize ?? 76,
     syncVariantImages: setting?.syncVariantImages ?? true,
@@ -199,19 +362,46 @@ export default function Index() {
       action: "select",
       multiple: true,
       selectionIds: products.map((product) => ({ id: product.id })),
-      filter: { hidden: false, variants: false },
+      filter: { hidden: false, variants: true },
     });
 
     if (!selection?.selection) return;
 
-    setProducts(
-      selection.selection.map((product) => ({
-        id: product.id,
-        title: product.title,
-        handle: product.handle,
-        image: product.images?.[0]?.originalSrc ?? null,
-      })),
+    const selectedProducts = normalizeProducts(
+      selection.selection.map((product) => {
+        const images =
+          product.images
+            ?.map((image: any) => ({
+              id: String(image.id ?? image.originalSrc ?? image.url ?? ""),
+              url: image.originalSrc ?? image.url ?? "",
+              alt: image.altText ?? null,
+            }))
+            .filter((image: SliderImage) => image.id && image.url) ?? [];
+        const variants =
+          product.variants?.map((variant: any) => ({
+            id: variant.id,
+            title: variant.title,
+            sku: variant.sku ?? null,
+            image:
+              variant.image?.originalSrc ??
+              variant.image?.url ??
+              product.images?.[0]?.originalSrc ??
+              null,
+            imageId: variant.image?.id ? String(variant.image.id) : null,
+          })) ?? [];
+
+        return {
+          id: product.id,
+          title: product.title,
+          handle: product.handle,
+          image: product.images?.[0]?.originalSrc ?? null,
+          images,
+          variants,
+        };
+      }),
     );
+
+    setProducts(selectedProducts);
   };
 
   const removeProduct = (id: string) => {
@@ -225,6 +415,45 @@ export default function Index() {
       <s-button slot="primary-action" onClick={chooseProducts}>
         Select products
       </s-button>
+
+      <s-section heading="Dashboard">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 12,
+          }}
+        >
+          <s-box padding="base" borderWidth="base" borderRadius="base">
+            <s-stack direction="block" gap="small">
+              <s-text tone="neutral">Selected products</s-text>
+              <s-heading>{products.length}</s-heading>
+            </s-stack>
+          </s-box>
+          <s-box padding="base" borderWidth="base" borderRadius="base">
+            <s-stack direction="block" gap="small">
+              <s-text tone="neutral">Mapped variants</s-text>
+              <s-heading>
+                {products.reduce(
+                  (total, product) =>
+                    total +
+                    (product.variants?.filter(
+                      (variant) =>
+                        (product.variantImageMap?.[variant.id] ?? []).length > 0,
+                    ).length ?? 0),
+                  0,
+                )}
+              </s-heading>
+            </s-stack>
+          </s-box>
+          <s-box padding="base" borderWidth="base" borderRadius="base">
+            <s-stack direction="block" gap="small">
+              <s-text tone="neutral">Zoom gallery</s-text>
+              <s-heading>{hideZoomIcon ? "Hidden" : "Enabled"}</s-heading>
+            </s-stack>
+          </s-box>
+        </div>
+      </s-section>
 
       <s-section heading="Slider settings">
         <s-stack direction="block" gap="base">
@@ -363,7 +592,22 @@ export default function Index() {
                   <s-stack direction="block" gap="small">
                     <s-text>{product.title}</s-text>
                     <s-text tone="neutral">{product.handle ?? product.id}</s-text>
+                    {product.variants?.length ? (
+                      <s-text tone="neutral">
+                        Mapped variants:{" "}
+                        {
+                          product.variants.filter(
+                            (variant) =>
+                              (product.variantImageMap?.[variant.id] ?? []).length > 0,
+                          ).length
+                        }{" "}
+                        / {product.variants.length}
+                      </s-text>
+                    ) : null}
                   </s-stack>
+                  <s-link href={`/app/products/${normalizeShopifyId(product.id)}`}>
+                    Open
+                  </s-link>
                   <s-button
                     variant="tertiary"
                     onClick={() => removeProduct(product.id)}
