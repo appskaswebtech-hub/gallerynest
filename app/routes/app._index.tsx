@@ -8,6 +8,13 @@ import { Form, useActionData, useLoaderData, useNavigation } from "react-router"
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import {
+  canUseProductCount,
+  getCachedBillingPlan,
+  limitProductsForPlan,
+  planProductLimit,
+  syncBillingPlan,
+} from "../billing.server";
 import prisma from "../db.server";
 
 type SliderProduct = {
@@ -207,16 +214,19 @@ const hydrateProductsWithVariants = async (
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, billing, session } = await authenticate.admin(request);
+  const { plan } = await syncBillingPlan({ billing, shop: session.shop });
   const setting = await prisma.productSliderSetting.findUnique({
     where: { shop: session.shop },
   });
   const products = await hydrateProductsWithVariants(
     admin,
-    parseJsonArray<SliderProduct>(setting?.products),
+    limitProductsForPlan(parseJsonArray<SliderProduct>(setting?.products), plan),
   );
 
   return {
+    plan,
+    productLimit: planProductLimit(plan),
     products,
     thumbnailPosition: setting?.thumbnailPosition ?? "left",
     thumbnailSize: setting?.thumbnailSize ?? 76,
@@ -246,7 +256,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const rawProducts = formData.get("products")?.toString() ?? "[]";
-  const products = normalizeProducts(parseJsonArray<SliderProduct>(rawProducts));
+  const plan = await getCachedBillingPlan(session.shop);
+  const requestedProducts = normalizeProducts(parseJsonArray<SliderProduct>(rawProducts));
+  if (!canUseProductCount(plan, requestedProducts.length)) {
+    return {
+      ok: false,
+      message: `Your ${plan} plan allows up to ${planProductLimit(plan)} products.`,
+    };
+  }
+  const products = requestedProducts;
   const thumbnailPosition = formData.get("thumbnailPosition")?.toString() ?? "left";
   const safeThumbnailPosition = THUMBNAIL_POSITIONS.has(thumbnailPosition)
     ? thumbnailPosition
@@ -323,6 +341,8 @@ export default function Index() {
   );
   const [nextArrowSvg, setNextArrowSvg] = useState(loaderData.nextArrowSvg);
   const [zoomIconSvg, setZoomIconSvg] = useState(loaderData.zoomIconSvg);
+  const productLimitLabel =
+    loaderData.productLimit === null ? "Unlimited" : String(loaderData.productLimit);
 
   const isSaving = navigation.state === "submitting";
 
@@ -352,7 +372,7 @@ export default function Index() {
 
   useEffect(() => {
     if (actionData?.message) {
-      shopify.toast.show(actionData.message);
+      shopify.toast.show(actionData.message, { isError: actionData.ok === false });
     }
   }, [actionData, shopify]);
 
@@ -401,6 +421,17 @@ export default function Index() {
       }),
     );
 
+    if (
+      loaderData.productLimit !== null &&
+      selectedProducts.length > loaderData.productLimit
+    ) {
+      shopify.toast.show(
+        `${loaderData.plan} plan allows up to ${loaderData.productLimit} products.`,
+        { isError: true },
+      );
+      return;
+    }
+
     setProducts(selectedProducts);
   };
 
@@ -427,7 +458,16 @@ export default function Index() {
           <s-box padding="base" borderWidth="base" borderRadius="base">
             <s-stack direction="block" gap="small">
               <s-text tone="neutral">Selected products</s-text>
-              <s-heading>{products.length}</s-heading>
+              <s-heading>
+                {products.length} / {productLimitLabel}
+              </s-heading>
+            </s-stack>
+          </s-box>
+          <s-box padding="base" borderWidth="base" borderRadius="base">
+            <s-stack direction="block" gap="small">
+              <s-text tone="neutral">Current plan</s-text>
+              <s-heading>{loaderData.plan}</s-heading>
+              <s-link href="/app/billing">Manage billing</s-link>
             </s-stack>
           </s-box>
           <s-box padding="base" borderWidth="base" borderRadius="base">

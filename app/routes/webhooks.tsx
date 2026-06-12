@@ -12,6 +12,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (session) {
         await db.$transaction([
           db.productSliderSetting.deleteMany({ where: { shop } }),
+          db.shopBilling.deleteMany({ where: { shop } }),
           db.session.deleteMany({ where: { shop } }),
         ]);
       }
@@ -19,6 +20,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     case "SHOP_REDACT":
       await db.$transaction([
         db.productSliderSetting.deleteMany({ where: { shop } }),
+        db.shopBilling.deleteMany({ where: { shop } }),
         db.session.deleteMany({ where: { shop } }),
       ]);
       break;

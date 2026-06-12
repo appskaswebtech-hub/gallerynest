@@ -1,5 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
+import { getCachedBillingPlan, limitProductsForPlan } from "../billing.server";
 import prisma from "../db.server";
 
 type SliderProduct = {
@@ -48,8 +49,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const setting = await prisma.productSliderSetting.findUnique({
     where: { shop: session.shop },
   });
-  const productIds = parseJsonArray(setting?.productIds);
-  const selectedProduct = parseProducts(setting?.products).find(
+  const plan = await getCachedBillingPlan(session.shop);
+  const products = limitProductsForPlan(parseProducts(setting?.products), plan);
+  const productIds = products.map((product) => product.id);
+  const selectedProduct = products.find(
     (product) => product.id === productId,
   );
 

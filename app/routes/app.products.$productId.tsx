@@ -14,6 +14,7 @@ import {
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import { getCachedBillingPlan, limitProductsForPlan } from "../billing.server";
 import prisma from "../db.server";
 
 type SliderProduct = {
@@ -185,7 +186,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const setting = await prisma.productSliderSetting.findUnique({
     where: { shop: session.shop },
   });
-  const savedProduct = parseJsonArray<SliderProduct>(setting?.products).find(
+  const plan = await getCachedBillingPlan(session.shop);
+  const savedProduct = limitProductsForPlan(
+    parseJsonArray<SliderProduct>(setting?.products),
+    plan,
+  ).find(
     (product) => normalizeShopifyId(product.id) === productId,
   );
 
@@ -223,6 +228,13 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     where: { shop: session.shop },
   });
   const products = parseJsonArray<SliderProduct>(setting?.products);
+  const plan = await getCachedBillingPlan(session.shop);
+  const allowedProduct = limitProductsForPlan(products, plan).some(
+    (product) => normalizeShopifyId(product.id) === productId,
+  );
+  if (!allowedProduct) {
+    return { ok: false, message: "Upgrade your plan to map this product." };
+  }
   const updatedProducts = products.map((product) =>
     normalizeShopifyId(product.id) === productId
       ? { ...product, variantImageMap: nextMap }
