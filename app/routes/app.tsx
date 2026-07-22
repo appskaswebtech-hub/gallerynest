@@ -4,24 +4,39 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { authenticate } from "../shopify.server";
+import { detectLocaleFromRequest } from "../i18n/detectLocale.server";
+import { LanguageProvider, useLanguage } from "../i18n/LanguageContext";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
 
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  return {
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+    detectedLocale: detectLocaleFromRequest(request),
+  };
 };
 
+function AppNav() {
+  const { t } = useLanguage();
+
+  return (
+    <s-app-nav>
+      <s-link href="/app">{t("nav.dashboard")}</s-link>
+      <s-link href="/app/billing">{t("nav.billing")}</s-link>
+    </s-app-nav>
+  );
+}
+
 export default function App() {
-  const { apiKey } = useLoaderData<typeof loader>();
+  const { apiKey, detectedLocale } = useLoaderData<typeof loader>();
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <s-app-nav>
-        <s-link href="/app">Dashboard</s-link>
-        <s-link href="/app/billing">Billing</s-link>
-      </s-app-nav>
-      <Outlet />
+      <LanguageProvider detectedLocale={detectedLocale}>
+        <AppNav />
+        <Outlet />
+      </LanguageProvider>
     </AppProvider>
   );
 }

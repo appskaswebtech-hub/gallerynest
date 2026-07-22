@@ -16,6 +16,9 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { getCachedBillingPlan, limitProductsForPlan } from "../billing.server";
 import prisma from "../db.server";
+import { useLanguage } from "../i18n/LanguageContext";
+import { detectLocaleFromRequest } from "../i18n/detectLocale.server";
+import { translate } from "../i18n/translations";
 
 type SliderProduct = {
   id: string;
@@ -205,6 +208,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
+  const locale = detectLocaleFromRequest(request);
   const productId = normalizeShopifyId(params.productId);
   const formData = await request.formData();
   const nextMapRaw = formData.get("variantImageMap")?.toString() ?? "{}";
@@ -233,7 +237,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     (product) => normalizeShopifyId(product.id) === productId,
   );
   if (!allowedProduct) {
-    return { ok: false, message: "Upgrade your plan to map this product." };
+    return { ok: false, message: translate(locale, "mapping.toastUpgrade") };
   }
   const updatedProducts = products.map((product) =>
     normalizeShopifyId(product.id) === productId
@@ -246,7 +250,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     data: { products: JSON.stringify(updatedProducts) },
   });
 
-  return { ok: true, message: "Image mapping saved" };
+  return { ok: true, message: translate(locale, "mapping.toastSaved") };
 };
 
 export default function ProductMapping() {
@@ -255,6 +259,7 @@ export default function ProductMapping() {
   const navigation = useNavigation();
   const params = useParams();
   const shopify = useAppBridge();
+  const { t } = useLanguage();
   const [activeVariantId, setActiveVariantId] = useState(
     product.variants?.[0]?.id ?? "",
   );
@@ -298,18 +303,15 @@ export default function ProductMapping() {
   return (
     <s-page heading={product.title}>
       <s-link slot="breadcrumb-actions" href="/app">
-        Product image slider
+        {t("mapping.breadcrumb")}
       </s-link>
       <s-link slot="primary-action" href="/app">
-        Back
+        {t("common.back")}
       </s-link>
 
-      <s-section heading="Variant image mapping">
+      <s-section heading={t("mapping.heading")}>
         <s-stack direction="block" gap="base">
-          <s-paragraph>
-            Pick a variant, then choose which product images should appear inside
-            the zoom gallery for that variant.
-          </s-paragraph>
+          <s-paragraph>{t("mapping.intro")}</s-paragraph>
           <div
             style={{
               display: "grid",
@@ -321,10 +323,11 @@ export default function ProductMapping() {
             <s-box padding="base" borderWidth="base" borderRadius="base">
               <s-stack direction="block" gap="base">
                 <s-text>
-                  Images for{" "}
-                  {activeVariant
-                    ? `${activeVariant.sku || activeVariant.title} - ${activeVariant.title}`
-                    : "selected variant"}
+                  {t("mapping.imagesForVariant", {
+                    variant: activeVariant
+                      ? `${activeVariant.sku || activeVariant.title} - ${activeVariant.title}`
+                      : t("mapping.selectedVariant"),
+                  })}
                 </s-text>
                 {product.images?.length ? (
                   <div
@@ -362,7 +365,7 @@ export default function ProductMapping() {
                           }}
                         />
                         <s-checkbox
-                          label="Show"
+                          label={t("mapping.show")}
                           checked={activeMappedImageIds.has(image.id)}
                           disabled={!activeVariant}
                           onChange={(event) => {
@@ -378,26 +381,43 @@ export default function ProductMapping() {
                     ))}
                   </div>
                 ) : (
-                  <s-paragraph>No product images found.</s-paragraph>
+                  <s-paragraph>{t("mapping.noImages")}</s-paragraph>
                 )}
               </s-stack>
             </s-box>
 
             <s-box padding="base" borderWidth="base" borderRadius="base">
               <s-stack direction="block" gap="small">
-                <s-text>Variants</s-text>
+                <s-text>{t("mapping.variantsHeading")}</s-text>
                 {product.variants?.length ? (
-                  product.variants.map((variant) => (
-                    <s-button
-                      key={variant.id}
-                      variant={variant.id === activeVariant?.id ? "primary" : "secondary"}
-                      onClick={() => setActiveVariantId(variant.id)}
-                    >
-                      {variant.sku || variant.title} - {variant.title}
-                    </s-button>
-                  ))
+                  product.variants.map((variant) => {
+                    const mappedCount = (variantImageMap[variant.id] ?? []).length;
+
+                    return (
+                      <s-stack
+                        key={variant.id}
+                        direction="inline"
+                        gap="small"
+                        alignItems="center"
+                      >
+                        <s-button
+                          variant={
+                            variant.id === activeVariant?.id ? "primary" : "secondary"
+                          }
+                          onClick={() => setActiveVariantId(variant.id)}
+                        >
+                          {variant.sku || variant.title} - {variant.title}
+                        </s-button>
+                        <s-badge tone={mappedCount > 0 ? "success" : "neutral"}>
+                          {mappedCount > 0
+                            ? t("mapping.mappedCount", { count: mappedCount })
+                            : t("mapping.unmapped")}
+                        </s-badge>
+                      </s-stack>
+                    );
+                  })
                 ) : (
-                  <s-paragraph>No variants found for this product.</s-paragraph>
+                  <s-paragraph>{t("mapping.noVariants")}</s-paragraph>
                 )}
               </s-stack>
             </s-box>
@@ -413,7 +433,7 @@ export default function ProductMapping() {
             value={JSON.stringify(variantImageMap)}
           />
           <s-button type="submit" variant="primary" loading={isSaving || undefined}>
-            Save mapping
+            {t("mapping.saveMapping")}
           </s-button>
         </Form>
       </s-section>

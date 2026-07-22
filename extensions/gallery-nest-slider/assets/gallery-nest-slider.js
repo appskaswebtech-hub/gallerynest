@@ -24,6 +24,65 @@
     ".product__media",
   ];
 
+  const STRINGS = {
+    en: {
+      galleryLabel: "Product image gallery",
+      close: "Close gallery",
+      prev: "Previous image",
+      next: "Next image",
+      viewImage: (n) => `View image ${n}`,
+      openGallery: "Open image gallery",
+      empty: "No product images found.",
+    },
+    es: {
+      galleryLabel: "Galería de imágenes del producto",
+      close: "Cerrar galería",
+      prev: "Imagen anterior",
+      next: "Imagen siguiente",
+      viewImage: (n) => `Ver imagen ${n}`,
+      openGallery: "Abrir galería de imágenes",
+      empty: "No se encontraron imágenes del producto.",
+    },
+    it: {
+      galleryLabel: "Galleria immagini prodotto",
+      close: "Chiudi galleria",
+      prev: "Immagine precedente",
+      next: "Immagine successiva",
+      viewImage: (n) => `Visualizza immagine ${n}`,
+      openGallery: "Apri galleria immagini",
+      empty: "Nessuna immagine del prodotto trovata.",
+    },
+    de: {
+      galleryLabel: "Produktbildergalerie",
+      close: "Galerie schließen",
+      prev: "Vorheriges Bild",
+      next: "Nächstes Bild",
+      viewImage: (n) => `Bild ${n} ansehen`,
+      openGallery: "Bildergalerie öffnen",
+      empty: "Keine Produktbilder gefunden.",
+    },
+    fr: {
+      galleryLabel: "Galerie d'images du produit",
+      close: "Fermer la galerie",
+      prev: "Image précédente",
+      next: "Image suivante",
+      viewImage: (n) => `Voir l'image ${n}`,
+      openGallery: "Ouvrir la galerie d'images",
+      empty: "Aucune image de produit trouvée.",
+    },
+  };
+
+  const detectLang = () => {
+    const raw = (document.documentElement.lang || "en").split("-")[0].toLowerCase();
+    return STRINGS[raw] ? raw : "en";
+  };
+
+  const t = (key, ...args) => {
+    const lang = detectLang();
+    const value = STRINGS[lang]?.[key] ?? STRINGS.en[key];
+    return typeof value === "function" ? value(...args) : value;
+  };
+
   const parseJson = (root, selector) => {
     const node = root.querySelector(selector);
     if (!node?.textContent) return [];
@@ -173,22 +232,22 @@
     lightbox.className = "gn-lightbox";
     lightbox.setAttribute("role", "dialog");
     lightbox.setAttribute("aria-modal", "true");
-    lightbox.setAttribute("aria-label", "Product image gallery");
+    lightbox.setAttribute("aria-label", t("galleryLabel"));
     lightbox.innerHTML = `
       <div class="gn-lightbox__bar">
         <span class="gn-lightbox__counter"></span>
-        <button class="gn-lightbox__close" type="button" aria-label="Close gallery">${defaultIcon("close")}</button>
+        <button class="gn-lightbox__close" type="button" aria-label="${t("close")}">${defaultIcon("close")}</button>
       </div>
       <div class="gn-lightbox__viewer">
         ${
           media.length > 1
-            ? `<button class="gn-lightbox__nav gn-lightbox__nav--prev" type="button" aria-label="Previous image">${icon("prev", settings.previousArrowSvg)}</button>`
+            ? `<button class="gn-lightbox__nav gn-lightbox__nav--prev" type="button" aria-label="${t("prev")}">${icon("prev", settings.previousArrowSvg)}</button>`
             : ""
         }
         <img class="gn-lightbox__image" alt="">
         ${
           media.length > 1
-            ? `<button class="gn-lightbox__nav gn-lightbox__nav--next" type="button" aria-label="Next image">${icon("next", settings.nextArrowSvg)}</button>`
+            ? `<button class="gn-lightbox__nav gn-lightbox__nav--next" type="button" aria-label="${t("next")}">${icon("next", settings.nextArrowSvg)}</button>`
             : ""
         }
       </div>
@@ -230,7 +289,7 @@
       const thumb = document.createElement("button");
       thumb.type = "button";
       thumb.className = "gn-lightbox__thumb";
-      thumb.setAttribute("aria-label", `View image ${index + 1}`);
+      thumb.setAttribute("aria-label", t("viewImage", index + 1));
       thumb.innerHTML = `<img src="${item.thumb || item.src}" alt="">`;
       thumb.addEventListener("click", () => setActive(index));
       thumbs.append(thumb);
@@ -275,7 +334,7 @@
     );
 
     if (!allMedia.length) {
-      root.innerHTML = '<div class="gn-slider__empty">No product images found.</div>';
+      root.innerHTML = `<div class="gn-slider__empty">${t("empty")}</div>`;
       root.hidden = false;
       return;
     }
@@ -286,7 +345,7 @@
         ${
           hideZoomIcon
             ? ""
-            : `<button class="gn-slider__zoom-icon gn-slider__zoom-icon--${zoomPosition}" type="button" aria-label="Open image gallery">${icon("zoom", settings.zoomIconSvg)}</button>`
+            : `<button class="gn-slider__zoom-icon gn-slider__zoom-icon--${zoomPosition}" type="button" aria-label="${t("openGallery")}">${icon("zoom", settings.zoomIconSvg)}</button>`
         }
         <img class="gn-slider__main" alt="">
       </div>
@@ -304,14 +363,14 @@
       const prev = document.createElement("button");
       prev.type = "button";
       prev.className = "gn-slider__button gn-slider__button--prev";
-      prev.setAttribute("aria-label", "Previous image");
+      prev.setAttribute("aria-label", t("prev"));
       prev.innerHTML = icon("prev", settings.previousArrowSvg);
       prev.addEventListener("click", () => setActive(activeIndex - 1));
 
       const next = document.createElement("button");
       next.type = "button";
       next.className = "gn-slider__button gn-slider__button--next";
-      next.setAttribute("aria-label", "Next image");
+      next.setAttribute("aria-label", t("next"));
       next.innerHTML = icon("next", settings.nextArrowSvg);
       next.addEventListener("click", () => setActive(activeIndex + 1));
 
@@ -326,7 +385,7 @@
         const thumb = document.createElement("button");
         thumb.type = "button";
         thumb.className = "gn-slider__thumb";
-        thumb.setAttribute("aria-label", `View image ${index + 1}`);
+        thumb.setAttribute("aria-label", t("viewImage", index + 1));
         thumb.innerHTML = `<img src="${item.thumb || item.src}" alt="">`;
         thumb.addEventListener("click", () => setActive(index));
         thumbs.append(thumb);
